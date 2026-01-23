@@ -1,0 +1,9 @@
+{
+  "strength": 2,
+  "threshold": 130,
+  "delta": 8,
+  "expand": 4,
+  "mask_size": 9,
+  "fill_size": 6,
+  "logo_path": "assets/logo.png"
+}
