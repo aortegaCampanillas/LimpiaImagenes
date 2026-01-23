@@ -2,6 +2,11 @@ name: Build Windows EXE
 
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag para la release (ej: v1.0.0)"
+        required: true
+        type: string
 
 jobs:
   build:
@@ -30,3 +35,12 @@ jobs:
         with:
           name: LimpiaImagenes-exe
           path: dist/LimpiaImagenes.exe
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          name: LimpiaImagenes ${{ inputs.tag }}
+          files: dist/LimpiaImagenes.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
