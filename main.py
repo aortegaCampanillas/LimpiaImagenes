@@ -80,6 +80,14 @@ def load_config() -> dict:
     return config
 
 
+def save_config(config: dict) -> None:
+    try:
+        with open(CONFIG_PATH, "w", encoding="utf-8") as handle:
+            json.dump(config, handle, indent=2, ensure_ascii=False)
+    except OSError:
+        return
+
+
 def resolve_asset_path(path: str) -> str:
     if not path:
         return path
@@ -274,6 +282,7 @@ class App:
 
     def on_settings_change(self, _value: str) -> None:
         if not self.original_image:
+            self._persist_config()
             return
 
         self.processed_image = denoise_image(
@@ -287,6 +296,20 @@ class App:
         )
         self._update_previews()
         self.status_label.config(text="Vista previa actualizada")
+        self._persist_config()
+
+    def _persist_config(self) -> None:
+        self.config.update(
+            {
+                "strength": self.strength_var.get(),
+                "threshold": self.threshold_var.get(),
+                "delta": self.delta_var.get(),
+                "expand": self.expand_var.get(),
+                "mask_size": self.mask_var.get(),
+                "fill_size": self.fill_var.get(),
+            }
+        )
+        save_config(self.config)
 
     def save_image(self) -> None:
         if not self.processed_image:
