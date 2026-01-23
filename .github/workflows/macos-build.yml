@@ -1,0 +1,61 @@
+name: Build macOS DMG
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag para la release (ej: v1.0.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller pillow
+          brew install create-dmg
+
+      - name: Build app
+        run: |
+          pyinstaller build_macos.spec
+
+      - name: Build DMG
+        run: |
+          create-dmg \
+            --volname "LimpiaImagenes" \
+            --window-size 700 450 \
+            --icon-size 120 \
+            --icon "LimpiaImagenes.app" 170 225 \
+            --app-drop-link 500 225 \
+            dist/LimpiaImagenes.dmg \
+            dist/LimpiaImagenes.app
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LimpiaImagenes-dmg
+          path: dist/LimpiaImagenes.dmg
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          name: LimpiaImagenes ${{ inputs.tag }}
+          files: dist/LimpiaImagenes.dmg
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
