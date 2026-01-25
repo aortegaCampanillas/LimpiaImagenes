@@ -1,0 +1,112 @@
+name: Build Windows EXE (C++)
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag para la release (ej: v1.0.0)"
+        required: true
+        type: string
+      vcpkg_commit:
+        description: "Commit de vcpkg a fijar (opcional)"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}\\vcpkg_binary_cache,readwrite"
+      VCPKG_BUILD_TYPE: "release"
+      VCPKG_DEFAULT_TRIPLET: "x64-windows-release"
+      VCPKG_HOST_TRIPLET: "x64-windows-release"
+      VCPKG_DEFAULT_HOST_TRIPLET: "x64-windows-release"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache vcpkg
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ github.workspace }}\vcpkg\downloads
+            ${{ github.workspace }}\vcpkg_installed
+          key: vcpkg-${{ runner.os }}-opencv-qtbase-release-${{ inputs.vcpkg_commit }}
+
+      - name: Cache vcpkg binary artifacts
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}\vcpkg_binary_cache
+          key: vcpkg-bincache-${{ runner.os }}-release-${{ inputs.vcpkg_commit }}
+
+      - name: Install dependencies (vcpkg)
+        run: |
+          if (Test-Path "$env:GITHUB_WORKSPACE\\vcpkg") { Remove-Item -Recurse -Force "$env:GITHUB_WORKSPACE\\vcpkg" }
+          git clone --depth 1 https://github.com/microsoft/vcpkg.git $env:GITHUB_WORKSPACE\vcpkg
+          $vcpkgCommit = "${{ inputs.vcpkg_commit }}"
+          if ($vcpkgCommit -and $vcpkgCommit.Trim() -ne "") {
+            git -C $env:GITHUB_WORKSPACE\vcpkg fetch --depth 1 origin $vcpkgCommit
+            git -C $env:GITHUB_WORKSPACE\vcpkg checkout $vcpkgCommit
+          }
+          cd $env:GITHUB_WORKSPACE\vcpkg
+          .\bootstrap-vcpkg.bat
+          .\vcpkg.exe install opencv qtbase --triplet x64-windows-release --host-triplet x64-windows-release --x-install-root=$env:GITHUB_WORKSPACE\vcpkg_installed --classic
+
+      - name: Configure
+        run: |
+          cmake -S cpp_app -B cpp_app/build -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake `
+            -DVCPKG_INSTALLED_DIR=${{ github.workspace }}/vcpkg_installed `
+            -DVCPKG_MANIFEST_MODE=OFF `
+            -DVCPKG_TARGET_TRIPLET=x64-windows-release
+
+      - name: Build
+        run: |
+          cmake --build cpp_app/build --config Release
+
+      - name: Package
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item cpp_app/build/Release/limpia_imagenes_gui.exe dist/LimpiaImagenes.exe
+          $binDir = "${{ github.workspace }}\vcpkg_installed\x64-windows-release\bin"
+          if (Test-Path $binDir) {
+            Copy-Item "$binDir\opencv_*.dll" dist -ErrorAction SilentlyContinue
+            Copy-Item "$binDir\*.dll" dist -ErrorAction SilentlyContinue
+          }
+          $qtDeploy = Get-ChildItem -Path "${{ github.workspace }}\vcpkg_installed\x64-windows-release\tools" -Recurse -Filter windeployqt.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($qtDeploy) {
+            & $qtDeploy.FullName --no-translations dist\LimpiaImagenes.exe
+          }
+          if (-not (Test-Path "dist\\platforms\\qwindows.dll")) {
+            $qwindows = "${{ github.workspace }}\\vcpkg_installed\\x64-windows-release\\plugins\\platforms\\qwindows.dll"
+            if (Test-Path $qwindows) {
+              New-Item -ItemType Directory -Force -Path dist\\platforms | Out-Null
+              Copy-Item $qwindows dist\\platforms
+            }
+          }
+
+      - name: Install Inno Setup
+        run: |
+          choco install innosetup -y
+
+      - name: Build Installer
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LimpiaImagenes-installer
+          path: dist-installer/LimpiaImagenes-Setup.exe
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          name: LimpiaImagenes ${{ inputs.tag }}
+          files: dist-installer/LimpiaImagenes-Setup.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

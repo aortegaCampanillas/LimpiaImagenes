@@ -1,0 +1,190 @@
+name: Build macOS DMG (C++)
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag para la release (ej: v1.0.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache Homebrew
+        uses: actions/cache@v4
+        with:
+          path: |
+            /Users/runner/Library/Caches/Homebrew
+            /opt/homebrew/Library/Caches/Homebrew
+          key: homebrew-${{ runner.os }}-opencv-qt-create-dmg
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+
+      - name: Install dependencies
+        run: |
+          brew install opencv qt create-dmg
+          python -m pip install --upgrade pip
+          pip install pillow
+
+      - name: Build app
+        run: |
+          cmake -S cpp_app -B cpp_app/build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="$(brew --prefix qt)" \
+            -DOpenCV_DIR="$(brew --prefix opencv)/lib/cmake/opencv4"
+          cmake --build cpp_app/build --config Release
+
+      - name: Resolve app path
+        run: |
+          APP_PATH="cpp_app/build/LimpiaImagenes.app"
+          if [ -d "cpp_app/build/Release/LimpiaImagenes.app" ]; then
+            APP_PATH="cpp_app/build/Release/LimpiaImagenes.app"
+          fi
+          if [ ! -d "${APP_PATH}" ]; then
+            echo "No se encontro LimpiaImagenes.app en cpp_app/build."
+            exit 1
+          fi
+          echo "APP_PATH=${APP_PATH}" >> "${GITHUB_ENV}"
+
+      - name: Bundle app dependencies
+        run: |
+          QT_PREFIX="$(brew --prefix qt)"
+          MACDEPLOYQT="${QT_PREFIX}/bin/macdeployqt"
+          if [ ! -x "${MACDEPLOYQT}" ] && [ -x "${QT_PREFIX}/libexec/macdeployqt" ]; then
+            MACDEPLOYQT="${QT_PREFIX}/libexec/macdeployqt"
+          fi
+          "${MACDEPLOYQT}" "${APP_PATH}" -always-overwrite -verbose=2
+          if [ ! -d "${APP_PATH}/Contents/Frameworks/QtWidgets.framework" ]; then
+            echo "QtWidgets.framework no encontrado en el bundle."
+            ls -la "${APP_PATH}/Contents/Frameworks"
+            exit 1
+          fi
+          echo "Contenido de Frameworks (post-bundle):"
+          ls -la "${APP_PATH}/Contents/Frameworks"
+          echo "Dependencias del ejecutable:"
+          otool -L "${APP_PATH}/Contents/MacOS/LimpiaImagenes"
+          OPENCV_PREFIX="$(brew --prefix opencv)"
+          mkdir -p "${APP_PATH}/Contents/Frameworks"
+          cp "${OPENCV_PREFIX}/lib"/libopencv_*.dylib "${APP_PATH}/Contents/Frameworks/" || true
+          if [ ! -d "${APP_PATH}/Contents/Frameworks/QtCore.framework" ]; then
+            cp -R "${QT_PREFIX}/lib/QtCore.framework" "${APP_PATH}/Contents/Frameworks/"
+          fi
+          if [ ! -d "${APP_PATH}/Contents/Frameworks/QtGui.framework" ]; then
+            cp -R "${QT_PREFIX}/lib/QtGui.framework" "${APP_PATH}/Contents/Frameworks/"
+          fi
+          if [ ! -d "${APP_PATH}/Contents/Frameworks/QtWidgets.framework" ]; then
+            cp -R "${QT_PREFIX}/lib/QtWidgets.framework" "${APP_PATH}/Contents/Frameworks/"
+          fi
+          if [ -d "${QT_PREFIX}/lib/QtDBus.framework" ] && [ ! -d "${APP_PATH}/Contents/Frameworks/QtDBus.framework" ]; then
+            cp -R "${QT_PREFIX}/lib/QtDBus.framework" "${APP_PATH}/Contents/Frameworks/"
+          fi
+          if [ -d "${QT_PREFIX}/lib/QtSvg.framework" ] && [ ! -d "${APP_PATH}/Contents/Frameworks/QtSvg.framework" ]; then
+            cp -R "${QT_PREFIX}/lib/QtSvg.framework" "${APP_PATH}/Contents/Frameworks/"
+          fi
+          if [ -d "${QT_PREFIX}/lib/QtPrintSupport.framework" ] && [ ! -d "${APP_PATH}/Contents/Frameworks/QtPrintSupport.framework" ]; then
+            cp -R "${QT_PREFIX}/lib/QtPrintSupport.framework" "${APP_PATH}/Contents/Frameworks/"
+          fi
+          OPENCV_OPT="/opt/homebrew/opt/opencv/lib"
+          for lib in "${APP_PATH}/Contents/Frameworks"/libopencv_*.dylib; do
+            libname="$(basename "$lib")"
+            install_name_tool -id "@executable_path/../Frameworks/${libname}" "$lib"
+            install_name_tool -change "${OPENCV_PREFIX}/lib/${libname}" "@executable_path/../Frameworks/${libname}" \
+              "${APP_PATH}/Contents/MacOS/LimpiaImagenes" || true
+            install_name_tool -change "${OPENCV_OPT}/${libname}" "@executable_path/../Frameworks/${libname}" \
+              "${APP_PATH}/Contents/MacOS/LimpiaImagenes" || true
+          done
+          PROTOBUF_PREFIX="$(brew --prefix protobuf 2>/dev/null || true)"
+          if [ -n "${PROTOBUF_PREFIX}" ] && [ -d "${PROTOBUF_PREFIX}/lib" ]; then
+            cp "${PROTOBUF_PREFIX}/lib"/libprotobuf*.dylib "${APP_PATH}/Contents/Frameworks/" || true
+            for pblib in "${APP_PATH}/Contents/Frameworks"/libprotobuf*.dylib; do
+              pbname="$(basename "$pblib")"
+              install_name_tool -id "@executable_path/../Frameworks/${pbname}" "$pblib" || true
+              install_name_tool -change "${PROTOBUF_PREFIX}/lib/${pbname}" "@executable_path/../Frameworks/${pbname}" \
+                "${APP_PATH}/Contents/Frameworks/libopencv_dnn.413.dylib" || true
+            done
+          fi
+          SEEN_FILE="$(mktemp)"
+          bundle_deps() {
+            local target="$1"
+            if [ -z "$target" ] || [ ! -f "$target" ]; then
+              return
+            fi
+            if grep -Fqx "$target" "$SEEN_FILE" 2>/dev/null; then
+              return
+            fi
+            echo "$target" >> "$SEEN_FILE"
+            while IFS= read -r dep; do
+              case "$dep" in
+                /System/*|/usr/lib/*) continue ;;
+                @rpath/*|@executable_path/*|@loader_path/*) continue ;;
+              esac
+              if [[ "$dep" == /opt/homebrew/* ]]; then
+                dep_base="$(basename "$dep")"
+                dest="${APP_PATH}/Contents/Frameworks/${dep_base}"
+                if [ ! -f "$dest" ]; then
+                  cp "$dep" "$dest"
+                  chmod 644 "$dest"
+                fi
+                install_name_tool -id "@executable_path/../Frameworks/${dep_base}" "$dest" 2>/dev/null || true
+                install_name_tool -change "$dep" "@executable_path/../Frameworks/${dep_base}" "$target" 2>/dev/null || true
+                bundle_deps "$dest"
+              fi
+            done < <(otool -L "$target" | tail -n +2 | awk '{print $1}')
+          }
+          bundle_deps "${APP_PATH}/Contents/MacOS/LimpiaImagenes"
+          for lib in "${APP_PATH}/Contents/Frameworks"/*.dylib; do
+            bundle_deps "$lib"
+          done
+          rm -f "$SEEN_FILE"
+          install_name_tool -add_rpath "@executable_path/../Frameworks" "${APP_PATH}/Contents/MacOS/LimpiaImagenes" || true
+          codesign --force --deep --sign - "${APP_PATH}"
+
+      - name: Generate DMG background
+        run: |
+          python scripts/generate_dmg_background.py
+
+      - name: Build DMG
+        run: |
+          mkdir -p dist
+          create-dmg \
+            --volname "LimpiaImagenes C++" \
+            --window-size 700 450 \
+            --icon-size 120 \
+            --icon "LimpiaImagenes.app" 170 225 \
+            --background "assets/dmg-background.png" \
+            --add-file "LEEME-MACOS.txt" "assets/LEEME-MACOS.txt" 500 90 \
+            --app-drop-link 500 225 \
+            dist/LimpiaImagenes.dmg \
+            "${APP_PATH}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LimpiaImagenes-dmg
+          path: dist/LimpiaImagenes.dmg
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          name: LimpiaImagenes ${{ inputs.tag }}
+          files: dist/LimpiaImagenes.dmg
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

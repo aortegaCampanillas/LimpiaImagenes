@@ -12,7 +12,7 @@ SolidCompression=yes
 WizardStyle=modern
 
 [Files]
-Source: "dist\LimpiaImagenes.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "dist\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\Limpia Imagenes"; Filename: "{app}\LimpiaImagenes.exe"
