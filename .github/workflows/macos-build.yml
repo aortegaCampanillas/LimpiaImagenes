@@ -41,6 +41,7 @@ jobs:
             --window-size 700 450 \
             --icon-size 120 \
             --icon "LimpiaImagenes.app" 170 225 \
+            --add-file "LEEME-MACOS.txt" "assets/LEEME-MACOS.txt" 170 90 \
             --app-drop-link 500 225 \
             dist/LimpiaImagenes.dmg \
             dist/LimpiaImagenes.app
