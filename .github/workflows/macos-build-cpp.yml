@@ -1,0 +1,83 @@
+name: Build macOS DMG (C++)
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag para la release (ej: v1.0.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          brew install opencv qt create-dmg dylibbundler
+          python -m pip install --upgrade pip
+          pip install pillow
+
+      - name: Build app
+        run: |
+          cmake -S cpp_app -B cpp_app/build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="$(brew --prefix qt)" \
+            -DOpenCV_DIR="$(brew --prefix opencv)/lib/cmake/opencv4"
+          cmake --build cpp_app/build --config Release
+
+      - name: Bundle app dependencies
+        run: |
+          QT_PREFIX="$(brew --prefix qt)"
+          "${QT_PREFIX}/bin/macdeployqt" cpp_app/build/LimpiaImagenes.app -verbose=2
+          dylibbundler \
+            -od \
+            -b \
+            -x cpp_app/build/LimpiaImagenes.app/Contents/MacOS/LimpiaImagenes \
+            -d cpp_app/build/LimpiaImagenes.app/Contents/Frameworks \
+            -p @executable_path/../Frameworks
+          codesign --force --deep --sign - cpp_app/build/LimpiaImagenes.app
+
+      - name: Generate DMG background
+        run: |
+          python scripts/generate_dmg_background.py
+
+      - name: Build DMG
+        run: |
+          mkdir -p dist
+          create-dmg \
+            --volname "LimpiaImagenes C++" \
+            --window-size 700 450 \
+            --icon-size 120 \
+            --icon "LimpiaImagenes.app" 170 225 \
+            --background "assets/dmg-background.png" \
+            --add-file "LEEME-MACOS.txt" "assets/LEEME-MACOS.txt" 500 90 \
+            --app-drop-link 500 225 \
+            dist/LimpiaImagenes.dmg \
+            cpp_app/build/LimpiaImagenes.app
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LimpiaImagenes-dmg
+          path: dist/LimpiaImagenes.dmg
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          name: LimpiaImagenes ${{ inputs.tag }}
+          files: dist/LimpiaImagenes.dmg
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,9 @@
+{
+  "name": "limpia-imagenes-cpp",
+  "version-string": "0.1.0",
+  "builtin-baseline": "9e5f0f9c82c5b6fcd508c6f17f4d6b6e888b0c66",
+  "dependencies": [
+    "opencv",
+    "qt6-base"
+  ]
+}

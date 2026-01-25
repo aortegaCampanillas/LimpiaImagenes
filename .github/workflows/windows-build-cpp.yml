@@ -1,0 +1,56 @@
+name: Build Windows EXE (C++)
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag para la release (ej: v1.0.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (vcpkg)
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: ${{ github.workspace }}/vcpkg
+          vcpkgJsonGlob: "cpp_app/vcpkg.json"
+          vcpkgGitCommitId: "9e5f0f9c82c5b6fcd508c6f17f4d6b6e888b0c66"
+          runVcpkgInstall: true
+
+      - name: Configure
+        run: |
+          cmake -S cpp_app -B cpp_app/build -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake
+
+      - name: Build
+        run: |
+          cmake --build cpp_app/build --config Release
+
+      - name: Package
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item cpp_app/build/Release/limpia_imagenes_gui.exe dist/LimpiaImagenes.exe
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LimpiaImagenes-exe
+          path: dist/LimpiaImagenes.exe
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          name: LimpiaImagenes ${{ inputs.tag }}
+          files: dist/LimpiaImagenes.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
