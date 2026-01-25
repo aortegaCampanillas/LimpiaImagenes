@@ -3,8 +3,8 @@ LimpiaImagenes - Nota para macOS
 Esta aplicacion no esta firmada ni notarizada.
 
 Como abrirla en versiones actuales de macOS:
-1) Mueve la aplicicación a la carpeta de aplicaciones y ejecútala.
-2) Al ejecutarla saldrá un mensaje diciendo que no ha podido verificar la aplicación. Pulsa en Aceptar.
-3) Luego ve a Configuracion del Sistema > Privacidad y seguridad. Baja asta el apartado de seguridad y donde dice que ha bloqueado la aplicación pulsa
-   "Abrir igualmente". Se abre otra ventana en la que debes volver a pulsar  "Abrir igualmente".
-4) Ya puedes ejecutar la alicación normalmente
+1) Mueve la aplicacion a la carpeta de aplicaciones y ejecutala.
+2) Al ejecutarla saldra un mensaje diciendo que no ha podido verificar la aplicacion. Pulsa en Aceptar.
+3) Luego ve a Configuracion del Sistema > Privacidad y seguridad. Baja hasta el apartado de seguridad y donde dice que ha bloqueado la aplicacion pulsa
+   "Abrir igualmente". Se abre otra ventana en la que debes volver a pulsar "Abrir igualmente".
+4) Ya puedes ejecutar la aplicacion normalmente

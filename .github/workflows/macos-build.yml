@@ -34,6 +34,10 @@ jobs:
         run: |
           pyinstaller build_macos.spec
 
+      - name: Generate DMG background
+        run: |
+          python scripts/generate_dmg_background.py
+
       - name: Build DMG
         run: |
           create-dmg \
@@ -41,7 +45,8 @@ jobs:
             --window-size 700 450 \
             --icon-size 120 \
             --icon "LimpiaImagenes.app" 170 225 \
-            --add-file "LEEME-MACOS.txt" "assets/LEEME-MACOS.txt" 170 90 \
+            --background "assets/dmg-background.png" \
+            --add-file "LEEME-MACOS.txt" "assets/LEEME-MACOS.txt" 500 90 \
             --app-drop-link 500 225 \
             dist/LimpiaImagenes.dmg \
             dist/LimpiaImagenes.app
