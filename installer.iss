@@ -14,9 +14,12 @@ WizardStyle=modern
 [Files]
 Source: "dist\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
-[Icons]
-Name: "{group}\Limpia Imagenes"; Filename: "{app}\LimpiaImagenes.exe"
-Name: "{commondesktop}\Limpia Imagenes"; Filename: "{app}\LimpiaImagenes.exe"; Tasks: desktopicon
-
 [Tasks]
 Name: "desktopicon"; Description: "Crear icono en el escritorio"; GroupDescription: "Iconos:"; Flags: unchecked
+
+[Icons]
+Name: "{group}\Limpia Imagenes"; Filename: "{app}\LimpiaImagenes.exe"
+Name: "{userdesktop}\Limpia Imagenes"; Filename: "{app}\LimpiaImagenes.exe"; Tasks: desktopicon
+
+[Run]
+Filename: "{app}\LimpiaImagenes.exe"; Description: "Ejecutar Limpia Imagenes"; Flags: nowait postinstall skipifsilent

@@ -1,4 +1,4 @@
-name: Build Windows EXE (C++)
+name: Build Windows Installer (C++)
 
 on:
   workflow_dispatch:
@@ -80,12 +80,23 @@ jobs:
           if ($qtDeploy) {
             & $qtDeploy.FullName --no-translations dist\LimpiaImagenes.exe
           }
-          if (-not (Test-Path "dist\\platforms\\qwindows.dll")) {
-            $qwindows = "${{ github.workspace }}\\vcpkg_installed\\x64-windows-release\\plugins\\platforms\\qwindows.dll"
-            if (Test-Path $qwindows) {
-              New-Item -ItemType Directory -Force -Path dist\\platforms | Out-Null
-              Copy-Item $qwindows dist\\platforms
-            }
+          $qtPluginsRoot = "${{ github.workspace }}\\vcpkg_installed\\x64-windows-release\\plugins"
+          $qwindows = Join-Path $qtPluginsRoot "platforms\\qwindows.dll"
+          if (Test-Path $qtPluginsRoot) {
+            Copy-Item "$qtPluginsRoot\\*" dist\\plugins -Recurse -Force -ErrorAction SilentlyContinue
+          }
+          if (-not (Test-Path "dist\\platforms\\qwindows.dll") -and (Test-Path $qwindows)) {
+            New-Item -ItemType Directory -Force -Path dist\\platforms | Out-Null
+            Copy-Item $qwindows dist\\platforms
+          }
+          if (-not (Test-Path "dist\\qt.conf")) {
+            @"
+[Paths]
+Plugins=plugins
+"@ | Set-Content -Encoding ASCII dist\\qt.conf
+          }
+          if (-not (Test-Path "dist\\platforms\\qwindows.dll") -and -not (Test-Path "dist\\plugins\\platforms\\qwindows.dll")) {
+            Write-Error "Qt platform plugin qwindows.dll no encontrado en dist."
           }
 
       - name: Install Inno Setup
