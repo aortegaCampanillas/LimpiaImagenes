@@ -1,4 +1,4 @@
-name: Build Windows Installer
+name: Build Windows Installer (C++)
 
 on:
   workflow_dispatch:
@@ -90,10 +90,7 @@ jobs:
             Copy-Item $qwindows dist\\platforms
           }
           if (-not (Test-Path "dist\\qt.conf")) {
-            @"
-[Paths]
-Plugins=plugins
-"@ | Set-Content -Encoding ASCII dist\\qt.conf
+            Set-Content -Encoding ASCII dist\\qt.conf -Value "[Paths]`nPlugins=plugins"
           }
           if (-not (Test-Path "dist\\platforms\\qwindows.dll") -and -not (Test-Path "dist\\plugins\\platforms\\qwindows.dll")) {
             Write-Error "Qt platform plugin qwindows.dll no encontrado en dist."
